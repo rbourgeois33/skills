@@ -13,6 +13,7 @@
 - `Unit_GTest` and `Unit_GTest_MPI_2procs` already fail on an unmodified H100 build (baseline, 2026-11).
 
 ## GPU coding conventions in TRUST (Kokkos)
+- Code style for TRUST ports: look like the surrounding TRUST code, readable for a beginner over performance, few comments, one code path (no CPU fallback), remove dead code/error machinery when asked.
 - Use TRUST arrays and their views: `tab.view_ro<N>()`, `view_wo<N>()`, `view_rw<N>()` (in templates: `tab.template view_ro<N>()`), `ConstView<T,N>` / `View<T,N>`. Don't build Kokkos views by hand. A 2D/3D tab can be viewed flattened with `view_ro<1>()`. 3D tabs: `IntTab_t t(n1,n2,n3)` / `resize(n1,n2,n3)`.
 - Kernel launch pattern: `Kokkos::parallel_for(start_gpu_timer(__KERNEL_NAME__), n, KOKKOS_LAMBDA(const int_t i) {...}); end_gpu_timer(__KERNEL_NAME__);`
 - Ordered numbering with a scan (flag / scan / fill): see `src/Kernel/Geometrie/Extraire_surface.cpp` and `Sous_Domaine.cpp` (`Kokkos::parallel_scan(..., KOKKOS_LAMBDA(i, int_t& update, const bool final){...}, total)`).
@@ -20,6 +21,9 @@
 - Device helpers: free `KOKKOS_INLINE_FUNCTION` templates in the .cpp.
 - Host access after kernels is safe: TRUSTArray `operator[]` calls `ensureDataOnHost()` on GPU builds.
 - Don't capture members in lambdas: copy to locals / views first.
+
+## Working on clusters (jeanzay, adastra)
+- Don't edit sources while a queued job will still compile them (e.g. a baseline build): draft in a scratch file, apply after the binary is built.
 
 ## Subsection: specific work on jeanzay with trust.
 - H100 configure (in the batch job, not on login):
