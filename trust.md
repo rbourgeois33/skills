@@ -3,4 +3,44 @@
 - Doc: https://cea-trust-platform.readthedocs.io/
 - To develop, build and test in `semi_opt`
 
+## General TRUST knowledge
+- Build targets: `make semi_optim` (binary `exec/TRUST_mpi_semi_opt`, `$exec_semi_opt`). `make ctest_semi_optim` = `(source ./env_TRUST.sh && lance_test -ctest $exec_semi_opt)`.
+- `make semi_optim` also builds tools (lance_test_seq_par, lata_tools, ICoCo, gnuplot) and returns an error if any tool fails, even when `BUILD_EXEC=OK`. To know whether TRUST itself built, check that `exec/TRUST_mpi_semi_opt` is newer than the job start.
+- Many test data files are Git LFS: run `module load git-lfs; git lfs pull` (login node) after cloning, otherwise tests/tools read pointer files (e.g. `cgio_open_file:invalid file type`).
+- ctest: runs in `MonoDir_mpi_semi_opt/src`; live log `Testing/Temporary/LastTest.log.tmp`; failures in `Testing/Temporary/LastTestsFailed.log`; per-case outputs in `$TRUST_TMP/tests/Reference/<case>/` (`PAR_<case>.out/.err` for the parallel run). `ctest -j$TRUST_NB_PHYSICAL_CORES` runs many cases at once on the GPU.
+- Skipped tests return code 200 (`lance_test`): on GPU builds PolyMAC, Pb_multiphase and some others are skipped, plus CoolProp/EOS/mpi4py cases when not built. => PolyMAC (polyhedra) code paths are NOT covered by GPU ctest.
+- `lance_test` first scans validation notebooks for extra NR cases; skip with `export TRUST_SKIP_SCAN_FORMS=1` (needed without conda: notebooks import `medcoupling` python).
+- `Unit_GTest` and `Unit_GTest_MPI_2procs` already fail on an unmodified H100 build (baseline, 2026-11).
+
+## GPU coding conventions in TRUST (Kokkos)
+- Use TRUST arrays and their views: `tab.view_ro<N>()`, `view_wo<N>()`, `view_rw<N>()` (in templates: `tab.template view_ro<N>()`), `ConstView<T,N>` / `View<T,N>`. Don't build Kokkos views by hand. A 2D/3D tab can be viewed flattened with `view_ro<1>()`. 3D tabs: `IntTab_t t(n1,n2,n3)` / `resize(n1,n2,n3)`.
+- Kernel launch pattern: `Kokkos::parallel_for(start_gpu_timer(__KERNEL_NAME__), n, KOKKOS_LAMBDA(const int_t i) {...}); end_gpu_timer(__KERNEL_NAME__);`
+- Ordered numbering with a scan (flag / scan / fill): see `src/Kernel/Geometrie/Extraire_surface.cpp` and `Sous_Domaine.cpp` (`Kokkos::parallel_scan(..., KOKKOS_LAMBDA(i, int_t& update, const bool final){...}, total)`).
+- nvcc forbids `KOKKOS_LAMBDA` inside **private/protected** member functions: make the method public (or use a free function).
+- Device helpers: free `KOKKOS_INLINE_FUNCTION` templates in the .cpp.
+- Host access after kernels is safe: TRUSTArray `operator[]` calls `ensureDataOnHost()` on GPU builds.
+- Don't capture members in lambdas: copy to locals / views first.
+
 ## Subsection: specific work on jeanzay with trust.
+- H100 configure (in the batch job, not on login):
+  `./configure -cuda=cc90 -without-conda -without-doc -disable-ccache -without-pdflatex -disable-valgrind -disable-plot2d -disable-checks -without-visit -disable-gmsh`
+  then `source env_TRUST.sh; make semi_optim`. Configure is only needed the first time. Full configure+build ~1 h on 24 cores.
+- `env_src/HOST.env` must map compute nodes `jzx*` to `HOST=jean-zay` (otherwise HOST_jean-zay.sh is skipped, no modules are loaded, and configure tries to download NVHPC without internet). Patched locally: `elif [ "${HOST#jzx}" != $HOST ];then HOST=jean-zay`.
+- H100 modules loaded by HOST_jean-zay.sh (cc90): `arch/h100 gcc/11.3.1 openmpi/4.1.5-cuda nvidia-compilers/25.1 cmake/3.31.4 python/3.11.5`.
+- `-without-conda` side effects:
+  - lata_tools: its optional python binding (`loaderpython`, TRUST_Post_Loader) needs PythonLibs + SWIG -> fails on compute nodes. Patched locally: `Outils/lata_tools/src/build.sh` adds `-Dloaderpython=OFF` when `TRUST_WITHOUT_CONDA=1`, and `src/tests/test_tools.sh` skips the python loader test in that case. compare_lata etc. still build.
+  - ICoCo fails (no SWIG). Decision: don't fix it, ctest doesn't need it.
+  - Validation-form scan needs medcoupling python -> `TRUST_SKIP_SCAN_FORMS=1`.
+- Running tests inside a batch job:
+  - By default `bin/trust` on jean-zay **submits every test case as its own sbatch job** for GPU builds (`define_soumission_batch` in HOST_jean-zay.sh forces `soumission=1`). Inside a job this floods the queue (on `trt@h100`, qos_gpu_h100-dev) and all tests time out. Patched locally: at the end of `define_soumission_batch`: `[ "$SLURM_JOB_ID" != "" ] && soumission=999`.
+  - Parallel cases go through `bin/mpirun.sh` with `$Mpirun` = stub OpenMPI mpirun -> all fail. Use `export Mpirun=/usr/bin/srun` (mpirun.sh handles it as `srun -n N`) + `export SLURM_OVERLAP=1`, and allocate `--ntasks=24 --cpus-per-task=1`.
+  - `make ctest_semi_optim` re-sources env_TRUST.sh and resets `Mpirun`: call `lance_test -ctest $exec_semi_opt` directly instead.
+  - (2026-11-25: srun-inside-job setup still being validated; update when confirmed.)
+- Working job script skeleton (`test_h100.sh` in the trust-code repo root):
+  ```
+  #SBATCH -A trt@h100 -C h100 --nodes=1 --ntasks=24 --cpus-per-task=1 --gres=gpu:1 --hint=nomultithread -t 20:00:00
+  cd $TRUST_ROOT; source env_TRUST.sh
+  export TRUST_SKIP_SCAN_FORMS=1 Mpirun=/usr/bin/srun SLURM_OVERLAP=1
+  touch .start; make semi_optim; [ exec/TRUST_mpi_semi_opt -nt .start ] || exit 1
+  lance_test -ctest $exec_semi_opt
+  ```
