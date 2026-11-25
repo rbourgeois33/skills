@@ -39,7 +39,10 @@
   - By default `bin/trust` on jean-zay **submits every test case as its own sbatch job** for GPU builds (`define_soumission_batch` in HOST_jean-zay.sh forces `soumission=1`). Inside a job this floods the queue (on `trt@h100`, qos_gpu_h100-dev) and all tests time out. Patched locally: at the end of `define_soumission_batch`: `[ "$SLURM_JOB_ID" != "" ] && soumission=999`.
   - Parallel cases go through `bin/mpirun.sh` with `$Mpirun` = stub OpenMPI mpirun -> all fail. Use `export Mpirun=/usr/bin/srun` (mpirun.sh handles it as `srun -n N`) + `export SLURM_OVERLAP=1`, and allocate `--ntasks=24 --cpus-per-task=1`.
   - `make ctest_semi_optim` re-sources env_TRUST.sh and resets `Mpirun`: call `lance_test -ctest $exec_semi_opt` directly instead.
-  - (2026-11-25: srun-inside-job setup still being validated; update when confirmed.)
+  - Confirmed 2026-11-25: srun parallel runs work inside the job with this setup.
+- **Do NOT run the full test suite (1812 cases) on Jean-Zay**: too long (~5 h per run at -j8 on 1 GPU). The user runs the full suite on their side. For a dev, run only the case(s) the user names, e.g. `trust -exe $exec_semi_opt -check JEL_bous` (`-exe` is needed: the default binary is `TRUST_mpi_opt`).
+- If a ctest run is ever needed: `lance_test` runs `ctest -j$TRUST_NB_PHYSICAL_CORES` = 96 (whole node) -> overload of 1 GPU, timeouts, orphaned srun steps that snowball. Set `export TRUST_NB_PHYSICAL_CORES=8` (measured: -j8 faster than -j24 on 1 H100). CUDA MPS is forbidden on Jean-Zay (`nvidia-cuda-mps-control: Permission denied`).
+- Inspect a running job from login: `srun --jobid=<id> --overlap -n1 <cmd>` (ssh to compute nodes is refused).
 - Working job script skeleton (`test_h100.sh` in the trust-code repo root):
   ```
   #SBATCH -A trt@h100 -C h100 --nodes=1 --ntasks=24 --cpus-per-task=1 --gres=gpu:1 --hint=nomultithread -t 20:00:00
