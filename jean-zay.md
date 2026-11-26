@@ -5,6 +5,7 @@ Add here everyhting you need to know about my account or about how jeanzay works
 - doc: https://www.idris.fr/docs/jean-zay/jean-zay/jean-zay-presentation/
 
 ## My account
+- Be mindful about my hours consumption. I only have 4000/year. Compile on compile node when you can. Use exclusive ONLY if you are doing benchmarks.
 - Unix groups: `pri`, `trt`. GPU hours for TRUST work: `-A trt@h100 -C h100`. One GPU is enough for build+tests: `--gres=gpu:1` (H100 node = 4 GPUs, 96 cores / 192 threads).
 - Work dir: `/lustre/fswork/projects/rech/pri/ujq29su`; TRUST tmp/test dir: `/lustre/fsn1/projects/rech/pri/ujq29su/.tmp_TRUST_ujq29su`.
 
