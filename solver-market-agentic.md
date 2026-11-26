@@ -41,8 +41,17 @@
 - Never run analysis/conversion of real matrices on the login node (the `--eigs` Lanczos on a 52k matrix took 9 min).
 - Test matrices: `$WORK/aij_51840.mtx` (dev), `$WORK/aij_2592000.mtx` (first real target), rhs = ones.
   aij_51840: SPD-like, M-matrix pattern, 98.9% zero row sums, cond(D^-1/2 A D^-1/2) ~ 2.8e4 -> CG + AMG.
+- Skills repo: other sessions push here too -> `git pull --rebase` before committing, never reset.
 - Job watcher: `$SMA_WORK/logs/watch.sh JOBID LOG` (sacct state + grep `==> Error` / `[x] ... failed`); run in background.
 
-## Results so far (aij_2592000, rhs=1, tol 1e-8 true residual, 1 H100, solve time only)
-- hypre PCG+BoomerAMG GPU defaults = PMIS/ext+i/l1-Jacobi deck: 22 its, 46.6 ms solve, 41 ms setup, op cx 3.46.
-- MueLu SA defaults: 4.15 s solve (default smoother bad on GPU); SA + Chebyshev(2): 17 its, 27.5 ms solve.
+## First campaign (2026-11-26): aij_2592000, rhs=1, tol 1e-8 true residual, 1 H100 (non-exclusive), k=0
+- Claude in this session acted as the agent (phase 2 orchestrator not built yet): 65/100 configs, stopped on purpose.
+  Campaign dir `$SMA_WORK/campaigns/test-aij2592000` (journal.jsonl, reasoning.md, decks/).
+- Matrix: 2D 5-point pressure Poisson (SPD, M-matrix). Best: MueLu SA + Chebyshev(1) + KLU2 coarse (<=2000) + CG,
+  22 its, ~23 ms/solve. hypre best 36.5 ms (PMIS, ext+i, Pmax 4, Jacobi w 0.9; GPU defaults 46.6).
+  GAMG best 43.2 ms (defaults 47.1). MueLu default smoother (sym GS) = 4.15 s: never on GPU.
+- Lessons: cheapest smoother wins (latency-bound cycles); SA prolongator smoothing essential; GAMG needs tiny coarse
+  grids (host LU), MueLu likes 2000-row KLU2; hypre AggNumLevels 1 + AggInterpType 6 segfaults on GPU (host routine),
+  AggInterpType 8 works; one-sided smoothing breaks CG; MueLu rejects pg for symmetric problems.
+- Noise on a non-exclusive node is ±3-5%: final rankings need --exclusive and more repeats.
+- Next lever proposed: half-precision MueLu hierarchy (needs Trilinos +float rebuild) -> user decision.
