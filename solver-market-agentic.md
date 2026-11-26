@@ -18,7 +18,23 @@
   The worker must die when the agent stops (STOP file + scancel + idle timeout + walltime).
 - Agents via CLI adapters (`claude -p` or any CLI agent). Budget enforced by `sma-tools run` (needs `--why`).
 - Expert decks live in `bench/` of the same repo (public info, we trust the agent). Matrices: public HF dataset.
-- The agent may edit the spack env, but must log every tweak in `$SMA_WORK/env/build_log.md`.
+- The agent does NOT edit the build: it writes proposals in `suggestions.md`; we implement them (recipe converges).
+- Always build Trilinos `+float` (MueLu "half precision" is then a per-deck option the agent may choose).
+- Measurement: 1 warm-up, then S setups + N solves on the last setup, no reload; k=0 -> 1+10, k>0 -> 5+10; median.
+- Every documented parameter is exposed: hypre setter tables generated from the installed headers; catalogues
+  from the libraries themselves (`sma-tools params`); sources + user guides of the built versions in
+  `$SMA_WORK/share/sma/src/`. MueLu parameter descriptions come from its `doc/UsersGuide/masterList.xml`.
+- GPU only (`sma/gpu_support.yaml`, every rule cites a doc quote or source file:line): host-only values refused
+  (not charged); coarsest-level solve exempt (host direct solve OR GPU smoother both allowed); host setup options
+  refused when setup is not measured (k=0); "ruled out" = clearly bad on GPU (MueLu unsmoothed aggregation,
+  MT Gauss-Seidel), with our runs as evidence. No runtime host/device-traffic check. No reordering (RCM): the
+  application solves in its own ordering. Anti-cheat dropped entirely (no deny on bench/, no anonymization).
+- Phase 2 `sma campaign`: `claude -p` (model = CLI option, default = account default), dontAsk + generated
+  `.claude/settings.json`, `--setting-sources ""`; relaunch until DONE / budget / 2 sessions without a run;
+  worker on demand (idle 10 min); final index.md + report.png/md (every config linked) + best.yaml.
+- Agent shell loops: `sma-tools shell 'SCRIPT'` under bwrap (writable only decks/ + work/). Claude Code's own
+  sandbox needs socat, absent on Jean Zay. Claude Code path rules: only Read(...) and Edit(...) count
+  (Glob/Grep/Write rules are ignored); allow the directory itself too for Grep roots.
 
 ## Spack on Jean Zay (learned the hard way)
 - BUILD the GPU libs ON AN H100 NODE (`machines/jean-zay/build_libs_gpu.slurm`): configure test programs linking CUDA
@@ -55,3 +71,12 @@
   AggInterpType 8 works; one-sided smoothing breaks CG; MueLu rejects pg for symmetric problems.
 - Noise on a non-exclusive node is ±3-5%: final rankings need --exclusive and more repeats.
 - Next lever proposed: half-precision MueLu hierarchy (needs Trilinos +float rebuild) -> user decision.
+
+## First agent campaign (2026-11-26): same system, Claude CLI default model (claude-opus-5-5), exclusive H100
+- `$SMA_WORK/campaigns/agent-aij2592000`: stopped itself after 38/100 (DONE: plateau = noise), 25.7 min, $2.5,
+  16 min exclusive node (~1.1 GPU h, 4 GPUs billed) + 8 min queue. Best 22.7 ms = same as manual, reached in 10 runs.
+- Exclusive node spread 0.3% (shared ±3-5%); remaining 22/23-iteration jitter = non-deterministic GPU aggregation.
+- PETSc GAMG baseline 32.6 ms on exclusive node (43 ms on shared node by hand).
+- Agent used: run+why, params --grep/--section, params --gpu, analysis.json. Unused: sources, web docs.
+  It missed "half precision" (now: prompt says search the catalogue first). Proposed RCM (bandwidth 1.35M).
+- GitHub ssh push from login sometimes times out: retry (`timeout 90 git push`).
