@@ -16,6 +16,11 @@ Add here everyhting you need to know about my account or about how jeanzay works
 - Benchmarks: always `--exclusive` (whole node; `scontrol show job` then shows AllocTRES gres/gpu=4, billing=4).
 
 ## How the machine behaves
+- HOME quota is 3 GiB and almost full (91% on 2026-11-26): keep tool caches (spack `SPACK_USER_CONFIG_PATH`/`SPACK_USER_CACHE_PATH`, pip, ...) under `$WORK`.
+- Storage: `$WORK` 5 TiB / 500k inodes (persistent), `$SCRATCH` (= /lustre/fsn1, purged, good for build stages), `$STORE` 50 TiB (few inodes, archives).
+- Login nodes are cascadelake; compil_h100 (jean-zay12) and H100 nodes are sapphirerapids (Xeon 8468): build H100 software on compil_h100.
+- `openmpi/4.1.x-cuda` modules have compiler prereqs: 4.1.6-cuda works with gcc/13.3.0; 4.1.8-cuda needs gcc 11.5/14.2/15.2 or nvidia-compilers.
+- Watch jobs with `sacct -X -j ID -o State` (squeue forgets finished jobs, a watcher based on squeue missed a failure).
 - Hostnames: login `jean-zay*`, H100 compute nodes `jzxh*` (e.g. `jzxh202`).
 - Compute nodes have fewer system packages than login: no `swig` (login has `/usr/bin/swig`), no python3 headers in `/usr/include`.
 - Module `python/3.11.5` = anaconda env `/lustre/fshomisc/sup/pub/anaconda-py3/2024.06/envs/python-3.11.5` (has libpython + headers), but CMake's legacy `FindPythonLibs` cannot find it (on Linux it doesn't derive `<prefix>/lib` from PATH, module sets no `CMAKE_PREFIX_PATH`).
