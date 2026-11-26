@@ -6,6 +6,7 @@
 ## General TRUST knowledge
 - Build targets: `make semi_optim` (binary `exec/TRUST_mpi_semi_opt`, `$exec_semi_opt`). `make ctest_semi_optim` = `(source ./env_TRUST.sh && lance_test -ctest $exec_semi_opt)`.
 - `make semi_optim` also builds tools (lance_test_seq_par, lata_tools, ICoCo, gnuplot) and returns an error if any tool fails, even when `BUILD_EXEC=OK`. To know whether TRUST itself built, check that `exec/TRUST_mpi_semi_opt` is newer than the job start.
+- **Rebuilding after a source edit (already configured and built once): build only the binary**, `source env_TRUST.sh; cd MonoDir_mpi_semi_opt/src && $TRUST_MAKE` (= `make -j 24`). CMake links straight into `exec/` (`EXECUTABLE_OUTPUT_PATH`). This skips the kernel libraries and the tools, which `make semi_optim` rebuilds every time (~6+ extra min: lance_test_seq_par ~4 min, ICoCo ~2 min). It saves wall time and compute hours.
 - Many test data files are Git LFS: run `module load git-lfs; git lfs pull` (login node) after cloning, otherwise tests/tools read pointer files (e.g. `cgio_open_file:invalid file type`).
 - ctest: runs in `MonoDir_mpi_semi_opt/src`; live log `Testing/Temporary/LastTest.log.tmp`; failures in `Testing/Temporary/LastTestsFailed.log`; per-case outputs in `$TRUST_TMP/tests/Reference/<case>/` (`PAR_<case>.out/.err` for the parallel run). `ctest -j$TRUST_NB_PHYSICAL_CORES` runs many cases at once on the GPU.
 - Skipped tests return code 200 (`lance_test`): on GPU builds PolyMAC, Pb_multiphase and some others are skipped, plus CoolProp/EOS/mpi4py cases when not built. => PolyMAC (polyhedra) code paths are NOT covered by GPU ctest.
@@ -48,6 +49,6 @@
   #SBATCH -A trt@h100 -C h100 --nodes=1 --ntasks=24 --cpus-per-task=1 --gres=gpu:1 --hint=nomultithread -t 20:00:00
   cd $TRUST_ROOT; source env_TRUST.sh
   export TRUST_SKIP_SCAN_FORMS=1 Mpirun=/usr/bin/srun SLURM_OVERLAP=1
-  touch .start; make semi_optim; [ exec/TRUST_mpi_semi_opt -nt .start ] || exit 1
+  touch .start; (cd MonoDir_mpi_semi_opt/src && $TRUST_MAKE); [ exec/TRUST_mpi_semi_opt -nt .start ] || exit 1
   lance_test -ctest $exec_semi_opt
   ```
