@@ -125,3 +125,6 @@
   Most of the gain is boomeramg -> sa-amg; sma tuning adds -15%. All options known to TRUST's PETSc ("no unused options").
 - Pushed as TRUST branch `rbs/bench-petsc-tuned-gamg` (gitlab.com, .data only). Dataset published with the campaign
   (new leaderboard row k=0 tol=5e-4). Validation + nsys dirs: `/lustre/fsn1/projects/rech/pri/ujq29su/trust-gamg-validate/`.
+- nsys (exclusive H100, v1.9.8, 10 steps; `trust-gamg-validate/nsys_{boomeramg,gamg}/`): median solve call 34.1 -> 9.95 ms,
+  first call (setup) 8.6 -> 5.0 s, kernel launches 40k -> 12k. boomeramg time is cuSPARSE SpMV (~52%) + hypre vector
+  kernels; tuned GAMG's top kernel is a CUB radix sort in the one-time setup.
