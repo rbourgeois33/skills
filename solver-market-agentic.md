@@ -106,3 +106,22 @@
 - Agent used: run+why, params --grep/--section, params --gpu, analysis.json. Unused: sources, web docs.
   It missed "half precision" (now: prompt says search the catalogue first). Proposed RCM (bandwidth 1.35M).
 - GitHub ssh push from login sometimes times out: retry (`timeout 90 git push`).
+
+## TRUST-criterion campaign (2026-11-27): trust_vef_P0_2592000, PETSc + hypre only, tol 5e-4, k=0, shared H100
+- Goal: beat TRUST's own solver on tests/GPU/OpenMP_Iterateur (TRUST has no MueLu -> `--libs petsc,hypre`).
+- TRUST criterion = `gcp rtol 5e-4`, unpreconditioned norm, relative to the initial residual
+  (Solv_Petsc.cpp: KSP_NORM_UNPRECONDITIONED + KSPConvergedDefaultSetUIRNorm). With x0=0 this equals sma `--tol 5e-4`.
+- Matrix fetched fresh from HF (no sma tool for it; user: the agent can figure it out): on login
+  `module load pytorch-gpu/py3/2.8.0; HF_HOME=~/.cache/huggingface hf download moletteremi/solver-market-agentic-database
+  --repo-type dataset --include "matrices/<name>/*" --local-dir DIR`, then gunzip A.mtx.gz + `prepare_system.slurm`.
+  sha256 of A.csr/b.vec matched info.json both directly and after re-preparing from the .mtx.
+- Run it detached: `tmux new -d -s NAME "...; sma campaign ... | tee LOG"`.
+- `$SMA_WORK/campaigns/trust-petsc-hypre-P0_2592000`: agent stopped after 42/100 (DONE: plateau), ~22 min.
+  Best PETSc CG + GAMG agg: 13.6 ms, 8 its (threshold 0.01, MIS min-degree ordering, Jacobi-Chebyshev degree 1,
+  degree 2 on the fine level `mg_levels_4_ksp_max_it 2`, coarse <=1000 eq solved by 4 Chebyshev its, aijcusparse).
+  Uses 23.8 GB GPU mem, setup ~4 s. hypre best 26 ms (GPU defaults). Earlier MueLu half precision: 9.5 ms at 5e-4.
+- Validated inside TRUST v1.9.8 (exclusive H100, OpenMP_Iterateur_BENCH_PETSc, solver time per step):
+  boomeramg 32.6 ms (13.7 its) / TRUST sa-amg defaults 12.1 ms (5.9 its) / sa-amg + sma options in `cli { }` 10.4 ms (7 its).
+  Most of the gain is boomeramg -> sa-amg; sma tuning adds -15%. All options known to TRUST's PETSc ("no unused options").
+- Pushed as TRUST branch `rbs/bench-petsc-tuned-gamg` (gitlab.com, .data only). Dataset published with the campaign
+  (new leaderboard row k=0 tol=5e-4). Validation + nsys dirs: `/lustre/fsn1/projects/rech/pri/ujq29su/trust-gamg-validate/`.

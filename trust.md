@@ -34,6 +34,27 @@
 ## Working on clusters (jeanzay, adastra)
 - Don't edit sources while a queued job will still compile them (e.g. a baseline build): draft in a scratch file, apply after the binary is built.
 
+## Git on Jean-Zay (learned 2026-11-27)
+- The CEA intranet remote (gitlab.deeplab.intra.cea.fr) is unreachable from Jean-Zay (proxy 503). Use the public repos:
+  `git@gitlab.com:cea-trust-platform/trust/trust-code.git` (remote `gitlab`, ssh: push works) and
+  `.../trust/externalpackages.git`. `$WORK/trust-code-h100` has remotes `origin` (intranet), `public` (https), `gitlab` (ssh).
+- git-lfs: `module load git-lfs/3.7.1`. A plain checkout hangs in the LFS smudge (it fetches from the intranet origin):
+  `GIT_LFS_SKIP_SMUDGE=1 git checkout ...` then `git lfs pull gitlab`. Never run two `lfs pull` at once (index errors).
+- Last release = v1.9.8 (trust-code dfa324c9e2, externalpackages tag v1.9.8 = d37ef75). Its extp.commit does not match
+  the externalpackages tag; configure with -disable-checks skips that check.
+- Local Jean-Zay patches (HOST.env jzx, lata_tools no-conda) are never committed; when switching branch they conflict
+  with upstream -> `git stash push -- <files>`, checkout, `git stash apply`, fix, `git reset`.
+- Clean an old build without losing externalpackages: `git clean -fdX -e '!externalpackages' -e '!externalpackages/**'`
+  (never `-fdx`). `make optim`: configure+build v1.9.8 = 1h04 on 24 cores; ICoCo fails (no SWIG) -> make rc=2 but
+  `exec/TRUST_mpi_opt` is fine.
+- Never push to `next`. Branches are pushed to gitlab.com under `rbs/`.
+
+## Running a TRUST case directly inside a job
+- Instead of `trust` (which sbatch-submits each case on GPU builds): `source env_TRUST.sh; $exec_opt CASE` in the case dir;
+  the .TU file gives "Linear solver resolutions Ax=B" time per step and iterations.
+- PETSc options on top of a TRUST preconditioner: `petsc_gpu gcp { precond sa-amg { } rtol 5.e-4 impr cli { -opt val ... } }`;
+  add `-options_left` to check that all options are known.
+
 ## Subsection: specific work on jeanzay with trust.
 - H100 configure (in the batch job, not on login):
   `./configure -cuda=cc90 -without-conda -without-doc -disable-ccache -without-pdflatex -disable-valgrind -disable-plot2d -disable-checks -without-visit -disable-gmsh`
