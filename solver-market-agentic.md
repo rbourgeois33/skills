@@ -26,7 +26,7 @@
   `$SMA_WORK/share/sma/src/`. MueLu parameter descriptions come from its `doc/UsersGuide/masterList.xml`.
 - GPU only (`sma/gpu_support.yaml`, every rule cites a doc quote or source file:line): host-only values refused
   (not charged); coarsest-level solve exempt (host direct solve OR GPU smoother both allowed); host setup options
-  refused when setup is not measured (k=0); "ruled out" = clearly bad on GPU (MueLu unsmoothed aggregation,
+  refused when setup is not measured (k=0) [REVERSED 2026-11-27: allowed at k=0, refused at k>0]; "ruled out" = clearly bad on GPU (MueLu unsmoothed aggregation,
   MT Gauss-Seidel), with our runs as evidence. No runtime host/device-traffic check. No reordering (RCM): the
   application solves in its own ordering. Anti-cheat dropped entirely (no deny on bench/, no anonymization).
 - Phase 2 `sma campaign`: `claude -p` (model = CLI option, default = account default), dontAsk + generated
@@ -35,6 +35,32 @@
 - Agent shell loops: `sma-tools shell 'SCRIPT'` under bwrap (writable only decks/ + work/). Claude Code's own
   sandbox needs socat, absent on Jean Zay. Claude Code path rules: only Read(...) and Edit(...) count
   (Glob/Grep/Write rules are ignored); allow the directory itself too for Grep roots.
+
+## Decisions (2026-11-27, after the hands-on + blind agent campaigns; all asked to me)
+- Old aij_2592000 campaigns (test-, agent-, diag-) DELETED for blind tests. New: `campaigns/hands-aij2592000`
+  (Claude by hand, 32 runs) and `campaigns/agent2-aij2592000` (blind `sma campaign`, 28 runs, $1.83): both
+  plateau 22.3-23.6 ms (MueLu SA + Cheb(1) + KLU2). `campaigns/validate-changes`: checks of the fixes below.
+- MueLu "half precision": implemented IN THE DRIVER (float A via convert<float>, MueLu<float> hierarchy,
+  HalfPrecOp double<->float wrapper), like the Stratimikos adapter; no Stratimikos/Thyra build. Before, the
+  key was a silent no-op (CreateTpetraPreconditioner ignores it). Check: 19.3 ms vs 22.4 ms at 22 its.
+- Hierarchy visible: result.json level_rows/level_nnz (all 3 libs), run output `hierarchy`, and
+  `runs/<id>/lib.log` = library output of that run (dispatcher captures non-protocol stdout + stderr).
+- Agent shell: widen allow rules only (no hook): read-only cmds (cd cat grep sort diff ...) chainable;
+  read roots + repo passed with --add-dir (else `cd <outside dir>; ...` is refused); loops/sed/python only
+  in `sma-tools shell`. Claude Code cannot allow `for` loops by prefix rule (tested). Bash(cat:*) can still
+  read any path (accepted).
+- Ruled-out -> `do_not_try` list in gpu_support.yaml, NO justification shown (evidence removed from the
+  repo: it leaked our results). Added hypre AggInterpType 6 (host-routine crash with AggNumLevels 1).
+- GPU-only rule restated: explore only GPU options, EXCEPT setup when it does not matter. Host setup is now
+  ALLOWED at k=0 and REFUSED at k>0 (reverses 2026-11-26), defaults included: MueLu's default
+  "aggregation: coloring algorithm" = serial colors on the host (COLORING_D2_SERIAL) -> k>0 decks must pick
+  default / vertex based / net based bit set / mis2 ... `params` hides host-only + do-not-try values (--all).
+- Half precision = preconditioner only (float hierarchy); Krylov + true residual stay double. The
+  double<->float copies (Tpetra copyConvert) run on the device.
+- Catalogue (sma/srcscan.py, `sma-tools catalog --parse-only` rebuilds without GPU): string values from the
+  MueLu user guide tables + values the sources compare to; declared keys nobody reads flagged NO EFFECT
+  (e.g. "aggregation: phase 1 algorithm" in 17.3: MIS2 is "aggregation: coloring algorithm"); keys read but
+  not declared listed as `source-only`.
 
 ## Spack on Jean Zay (learned the hard way)
 - BUILD the GPU libs ON AN H100 NODE (`machines/jean-zay/build_libs_gpu.slurm`): configure test programs linking CUDA
